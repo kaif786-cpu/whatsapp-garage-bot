@@ -5,9 +5,10 @@ const fs = require("fs");
 const app = express();
 app.use(express.json());
 
-const VERIFY_TOKEN = "garage_token_123";
-const ACCESS_TOKEN = "EAAg6o4omib8BQwz6hkgr0RRKTT9vS1ZCrvb5fy9qakkKAyaYnhM0nZCBL56lMIlt9k1COMZA21yqdgeRmCWVX2bdYcoe6JzewjPvSPg5cEwND5jR3ADY3ZAEvtkVV36yyrEVeVemK4BiCHdGazX0HLwQ5FcvqdClbWIHPzGLKJPKxfKBZBcSsuLBVeyRrSAZDZD";
-const PHONE_NUMBER_ID = "986804867849479"; // apna id daal dena
+// ✅ Environment variables use karo
+const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
+const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
+const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
 
 let userSessions = {};
 
@@ -20,9 +21,9 @@ app.get("/webhook", (req, res) => {
   if (mode && token) {
     if (mode === "subscribe" && token === VERIFY_TOKEN) {
       console.log("Webhook verified!");
-      res.status(200).send(challenge);
+      return res.status(200).send(challenge);
     } else {
-      res.sendStatus(403);
+      return res.sendStatus(403);
     }
   }
 });
@@ -39,22 +40,18 @@ app.post("/webhook", async (req, res) => {
       let from = message.from;
       let msg = message.text?.body;
 
-      console.log("Message:", msg);
-
       if (!userSessions[from]) {
         userSessions[from] = { step: 0 };
       }
 
       let replyText = "";
 
-      // START
       if (msg?.toLowerCase() === "hi") {
         userSessions[from] = { step: 0 };
         replyText =
           "Namaste 🙏\n\n1️⃣ Service Due Check\n2️⃣ Service Book Karni Hai";
       }
 
-      // OPTION 1
       else if (msg === "1") {
         userSessions[from].step = 1;
         replyText = "Gaadi ka model kya hai?";
@@ -79,7 +76,6 @@ app.post("/webhook", async (req, res) => {
         userSessions[from] = { step: 0 };
       }
 
-      // 🔥 OPTION 2 BOOKING
       else if (msg === "2") {
         userSessions[from].step = 10;
         replyText = "Booking ke liye gaadi ka model batao 🚗";
@@ -123,7 +119,6 @@ app.post("/webhook", async (req, res) => {
         replyText = "Kripya 'Hi' bhej kar shuru karein.";
       }
 
-      // SEND MESSAGE
       await axios.post(
         `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
         {
@@ -140,12 +135,14 @@ app.post("/webhook", async (req, res) => {
       );
     }
 
-    res.sendStatus(200);
+    return res.sendStatus(200);
   } else {
-    res.sendStatus(404);
+    return res.sendStatus(404);
   }
 });
 
-app.listen(3000, () => {
-  console.log("Server running on port 3000");
+// ✅ Important: Render ke liye dynamic port
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log("Server running on port " + PORT);
 });
