@@ -1,237 +1,173 @@
+require("dotenv").config();
 const express = require("express");
 const axios = require("axios");
-const fs = require("fs");
 
 const app = express();
 app.use(express.json());
 
-const ACCESS_TOKEN = process.env.ACCESS_TOKEN;
-const PHONE_NUMBER_ID = process.env.PHONE_NUMBER_ID;
-const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+const PORT = process.env.PORT || 3000;
 
-let userSessions = {};
+let customers = {};
 
-// ===== VERIFY =====
+// ================= VERIFY WEBHOOK =================
 app.get("/webhook", (req, res) => {
-  if (
-    req.query["hub.mode"] &&
-    req.query["hub.verify_token"] === VERIFY_TOKEN
-  ) {
-    return res.status(200).send(req.query["hub.challenge"]);
+  const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
+
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  if (mode && token === VERIFY_TOKEN) {
+    res.status(200).send(challenge);
+  } else {
+    res.sendStatus(403);
   }
-  res.sendStatus(403);
 });
 
-// ===== SEND BUTTONS =====
-async function sendButtons(to, text, buttons) {
+// ================= SEND TEXT =================
+async function sendText(to, message) {
   await axios.post(
-    `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
+    `https://graph.facebook.com/v25.0/${process.env.PHONE_NUMBER_ID}/messages`,
     {
       messaging_product: "whatsapp",
-      to,
+      to: to,
+      text: { body: message }
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.ACCESS_TOKEN}`,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+}
+
+// ================= SEND MENU =================
+async function sendMenu(to) {
+  await axios.post(
+    `https://graph.facebook.com/v25.0/${process.env.PHONE_NUMBER_ID}/messages`,
+    {
+      messaging_product: "whatsapp",
+      to: to,
       type: "interactive",
       interactive: {
         type: "button",
-        body: { text },
+        body: { text: "Garage Bot Menu 👇" },
         action: {
-          buttons: buttons.map(b => ({
-            type: "reply",
-            reply: { id: b.id, title: b.title }
-          }))
+          buttons: [
+            {
+              type: "reply",
+              reply: { id: "save_service", title: "Save Service" }
+            },
+            {
+              type: "reply",
+              reply: { id: "check_due", title: "Check Service Due" }
+            }
+          ]
         }
       }
     },
     {
       headers: {
-        Authorization: `Bearer ${ACCESS_TOKEN}`,
+        Authorization: `Bearer ${process.env.ACCESS_TOKEN}`,
         "Content-Type": "application/json"
       }
     }
   );
 }
 
-// ===== SEND TEXT =====
-async function sendText(to, text) {
-  await axios.post(
-    `https://graph.facebook.com/v25.0/${PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to,
-      text: { body: text }
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${ACCESS_TOKEN}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
-}
-
-// ===== WEBHOOK =====
+// ================= WEBHOOK =================
 app.post("/webhook", async (req, res) => {
-  let body = req.body;
+  try {
+    const body = req.body;
 
-  if (body.object) {
-    let change = body.entry?.[0]?.changes?.[0]?.value;
+    if (
+      body.object &&
+      body.entry &&
+      body.entry[0].changes &&
+      body.entry[0].changes[0].value.messages
+    ) {
+      const message =
+        body.entry[0].changes[0].value.messages[0];
 
-    if (change?.messages) {
-      let message = change.messages[0];
-      let from = message.from;
+      const from = message.from;
+      let msg = "";
 
-    let msg = "";
-
-if (message.type === "text") {
-  msg = message.text.body;
-} 
-else if (message.type === "interactive") {
-  msg = message.interactive.button_reply.id;
-}
-
-if (msg) {
-  msg = msg.trim().toLowerCase();
-}
-
-      if (!userSessions[from]) userSessions[from] = { step: 0 };
-
-      // ===== MENU =====
-      if (msg === "hi" || msg === "menu") {
-        userSessions[from] = { step: 0 };
-
-        await sendButtons(from, "Namaste 🙏 Choose option:", [
-          { id: "due", title: "🛠 Service Due Check" },
-          { id: "booking", title: "📅 Service Booking" },
-          { id: "save", title: "💾 Save Service Record" },
-          { id: "history", title: "📜 Service History" }
-        ]);
-        return res.sendStatus(200);
+      if (message.type === "text") {
+        msg = message.text.body.trim().toLowerCase();
       }
 
-      // ===== SAVE RECORD =====
-      if (msg === "save") {
-        userSessions[from].step = 1;
-        return sendButtons(from, "Select unit:", [
-          { id: "km", title: "KM" },
-          { id: "hours", title: "Hours" }
-        ]);
+      if (message.type === "interactive") {
+        msg = message.interactive.button_reply.id;
       }
 
-      if (msg === "km" || msg === "hours") {
-        userSessions[from].unit = msg;
-        userSessions[from].step = 2;
-        return sendText(from, "Service date (DD-MM-YYYY) likho:");
+      if (!customers[from]) customers[from] = {};
+
+      // ===== OPEN MENU =====
+      if (msg === "hi") {
+        await sendMenu(from);
       }
 
-      if (userSessions[from].step === 2) {
-        userSessions[from].date = msg;
-        userSessions[from].step = 3;
-        return sendText(from, `Service ke time ${userSessions[from].unit} kitne the?`);
+      // ===== SAVE SERVICE BUTTON =====
+      else if (msg === "save_service") {
+        customers[from].step = "ask_date";
+        await sendText(from, "Service date bhejo (DD-MM-YYYY)");
       }
 
-      if (userSessions[from].step === 3) {
-        userSessions[from].value = parseInt(msg);
-        userSessions[from].step = 4;
-        return sendText(from, `Next service kitne ${userSessions[from].unit} baad?`);
+      else if (customers[from].step === "ask_date") {
+        customers[from].serviceDate = msg;
+        customers[from].step = "ask_km";
+        await sendText(from, "Present KM kitna hai?");
       }
 
-      if (userSessions[from].step === 4) {
-        let record = {
-          phone: from,
-          date: userSessions[from].date,
-          unit: userSessions[from].unit,
-          value: userSessions[from].value,
-          interval: parseInt(msg)
-        };
+      else if (customers[from].step === "ask_km") {
+        customers[from].serviceKM = msg;
+        customers[from].step = "ask_next_km";
+        await sendText(from, "Mechanic ne kitne KM baad service bola?");
+      }
 
-        let services = [];
-        if (fs.existsSync("services.json")) {
-          services = JSON.parse(fs.readFileSync("services.json"));
+      else if (customers[from].step === "ask_next_km") {
+        customers[from].nextServiceKM = msg;
+        customers[from].step = null;
+
+        await sendText(
+          from,
+          "✅ Service Saved!\n\nDate: " +
+            customers[from].serviceDate +
+            "\nKM: " +
+            customers[from].serviceKM +
+            "\nNext Service After: " +
+            customers[from].nextServiceKM +
+            " KM"
+        );
+      }
+
+      // ===== CHECK SERVICE DUE =====
+      else if (msg === "check_due") {
+        if (!customers[from].serviceKM) {
+          await sendText(from, "❌ No service record found.");
+        } else {
+          await sendText(
+            from,
+            "📋 Last Service Details:\n\nDate: " +
+              customers[from].serviceDate +
+              "\nKM: " +
+              customers[from].serviceKM +
+              "\nNext Service After: " +
+              customers[from].nextServiceKM +
+              " KM"
+          );
         }
-
-        services.push(record);
-        fs.writeFileSync("services.json", JSON.stringify(services, null, 2));
-
-        await sendText(from, "✅ Service record saved successfully!");
-
-        userSessions[from] = { step: 0 };
-        return res.sendStatus(200);
       }
-
-      // ===== HISTORY =====
-      if (msg === "history") {
-        if (!fs.existsSync("services.json"))
-          return sendText(from, "❌ No history found.");
-
-        let services = JSON.parse(fs.readFileSync("services.json"));
-        let userRecords = services.filter(s => s.phone === from);
-
-        if (userRecords.length === 0)
-          return sendText(from, "❌ No history found.");
-
-        let reply = "📜 Service History:\n\n";
-
-        userRecords.forEach((r, i) => {
-          reply += `${i + 1}. 📅 ${r.date}\n`;
-          reply += `   🔧 ${r.value} ${r.unit}\n`;
-          reply += `   🔁 Next at ${r.value + r.interval} ${r.unit}\n\n`;
-        });
-
-        return sendText(from, reply);
-      }
-
-      // ===== DUE CHECK =====
-      if (msg === "due") {
-        if (!fs.existsSync("services.json"))
-          return sendText(from, "❌ No service record found.");
-
-        let services = JSON.parse(fs.readFileSync("services.json"));
-        let userRecords = services.filter(s => s.phone === from);
-
-        if (userRecords.length === 0)
-          return sendText(from, "❌ No service record found.");
-
-        let last = userRecords[userRecords.length - 1];
-
-        userSessions[from].record = last;
-        userSessions[from].step = 10;
-
-        return sendText(from, `Current ${last.unit} kitne hai?`);
-      }
-
-      if (userSessions[from].step === 10) {
-        let current = parseInt(msg);
-        let r = userSessions[from].record;
-
-        let next = r.value + r.interval;
-        let remaining = next - current;
-
-        let reply =
-          `📅 Last Service: ${r.date}\n` +
-          `🔧 ${r.value} ${r.unit}\n` +
-          `🔁 Interval: ${r.interval} ${r.unit}\n\n` +
-          `🛠 Next Service: ${next} ${r.unit}\n`;
-
-        if (remaining <= 0)
-          reply += "⚠️ Service Due ho chuki hai!";
-        else reply += `👍 ${remaining} ${r.unit} baad service hogi.`;
-
-        await sendText(from, reply);
-
-        userSessions[from] = { step: 0 };
-        return res.sendStatus(200);
-      }
-
-      await sendText(from, "Type 'Hi' to open menu.");
     }
 
-    return res.sendStatus(200);
+    res.sendStatus(200);
+  } catch (error) {
+    console.log(error);
+    res.sendStatus(500);
   }
-
-  return res.sendStatus(404);
 });
 
-// ===== SERVER =====
-const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log("Server running...");
+  console.log("Server running on port " + PORT);
 });
