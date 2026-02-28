@@ -48,47 +48,28 @@ app.post("/webhook", async (req, res) => {
       if (msg?.toLowerCase() === "hi") {
         userSessions[from] = { step: 0 };
         replyText =
-          "Namaste 🙏\n\n1️⃣ Service Due (Date se)\n2️⃣ Service Due (KM se)\n3️⃣ Service Booking";
+          "Namaste 🙏\n\n1️⃣ Service Due (KM se)\n2️⃣ Service Booking\n3️⃣ Service Record Save";
       }
 
-      // ===== OPTION 1 DATE BASED =====
+      // ===== OPTION 1 KM DUE CHECK =====
       else if (msg === "1") {
-        userSessions[from].step = 1;
-        replyText = "Last service kab hui thi? (DD-MM-YYYY)";
-      }
-
-      else if (userSessions[from].step === 1) {
-        let parts = msg.split("-");
-        let serviceDate = new Date(parts[2], parts[1] - 1, parts[0]);
-        serviceDate.setMonth(serviceDate.getMonth() + 3);
-
-        let nextService = serviceDate.toLocaleDateString("en-GB");
-
-        replyText =
-          `🛠 Next Service Date: ${nextService}\n\nDhanyavaad 🙏`;
-
-        userSessions[from] = { step: 0 };
-      }
-
-      // ===== OPTION 2 KM BASED =====
-      else if (msg === "2") {
-        userSessions[from].step = 20;
+        userSessions[from].step = 10;
         replyText = "Last service par kitne KM the?";
       }
 
-      else if (userSessions[from].step === 20) {
+      else if (userSessions[from].step === 10) {
         userSessions[from].lastKm = parseInt(msg);
-        userSessions[from].step = 21;
-        replyText = "Mechanic ne kitne KM baad service bola tha? (Example: 4000)";
+        userSessions[from].step = 11;
+        replyText = "Mechanic ne kitne KM baad service bola tha?";
       }
 
-      else if (userSessions[from].step === 21) {
+      else if (userSessions[from].step === 11) {
         userSessions[from].intervalKm = parseInt(msg);
-        userSessions[from].step = 22;
+        userSessions[from].step = 12;
         replyText = "Abhi gaadi kitne KM chali hai?";
       }
 
-      else if (userSessions[from].step === 22) {
+      else if (userSessions[from].step === 12) {
         let lastKm = userSessions[from].lastKm;
         let intervalKm = userSessions[from].intervalKm;
         let currentKm = parseInt(msg);
@@ -107,25 +88,25 @@ app.post("/webhook", async (req, res) => {
         userSessions[from] = { step: 0 };
       }
 
-      // ===== OPTION 3 BOOKING =====
-      else if (msg === "3") {
-        userSessions[from].step = 30;
+      // ===== OPTION 2 BOOKING =====
+      else if (msg === "2") {
+        userSessions[from].step = 20;
         replyText = "Gaadi ka model batao 🚗";
       }
 
-      else if (userSessions[from].step === 30) {
+      else if (userSessions[from].step === 20) {
         userSessions[from].model = msg;
-        userSessions[from].step = 31;
+        userSessions[from].step = 21;
         replyText = "Service date kya chahiye? (DD-MM-YYYY)";
       }
 
-      else if (userSessions[from].step === 31) {
+      else if (userSessions[from].step === 21) {
         userSessions[from].date = msg;
-        userSessions[from].step = 32;
+        userSessions[from].step = 22;
         replyText = "Time batao (Example: 11:30 AM)";
       }
 
-      else if (userSessions[from].step === 32) {
+      else if (userSessions[from].step === 22) {
         let booking = {
           phone: from,
           model: userSessions[from].model,
@@ -142,7 +123,47 @@ app.post("/webhook", async (req, res) => {
         fs.writeFileSync("bookings.json", JSON.stringify(bookings, null, 2));
 
         replyText =
-          `✅ Booking Confirmed!\n\n🚗 ${booking.model}\n📅 ${booking.date}\n⏰ ${booking.time}\n\nDhanyavaad 🙏`;
+          `✅ Booking Confirmed!\n\n🚗 ${booking.model}\n📅 ${booking.date}\n⏰ ${booking.time}`;
+
+        userSessions[from] = { step: 0 };
+      }
+
+      // ===== OPTION 3 SERVICE RECORD SAVE =====
+      else if (msg === "3") {
+        userSessions[from].step = 30;
+        replyText = "Service date batao (DD-MM-YYYY)";
+      }
+
+      else if (userSessions[from].step === 30) {
+        userSessions[from].serviceDate = msg;
+        userSessions[from].step = 31;
+        replyText = "Service ke time gaadi kitne KM chali thi?";
+      }
+
+      else if (userSessions[from].step === 31) {
+        userSessions[from].serviceKm = parseInt(msg);
+        userSessions[from].step = 32;
+        replyText = "Agli service kitne KM baad karni hai?";
+      }
+
+      else if (userSessions[from].step === 32) {
+        let record = {
+          phone: from,
+          serviceDate: userSessions[from].serviceDate,
+          serviceKm: userSessions[from].serviceKm,
+          intervalKm: parseInt(msg),
+        };
+
+        let services = [];
+        if (fs.existsSync("services.json")) {
+          services = JSON.parse(fs.readFileSync("services.json"));
+        }
+
+        services.push(record);
+        fs.writeFileSync("services.json", JSON.stringify(services, null, 2));
+
+        replyText =
+          `✅ Service Record Save Ho Gaya!\n\n📅 ${record.serviceDate}\n🛞 ${record.serviceKm} KM\n🔁 Next at ${record.serviceKm + record.intervalKm} KM`;
 
         userSessions[from] = { step: 0 };
       }
