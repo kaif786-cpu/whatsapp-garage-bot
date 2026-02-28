@@ -19,7 +19,6 @@ app.get("/webhook", (req, res) => {
 
   if (mode && token) {
     if (mode === "subscribe" && token === VERIFY_TOKEN) {
-      console.log("Webhook verified!");
       return res.status(200).send(challenge);
     } else {
       return res.sendStatus(403);
@@ -80,19 +79,26 @@ app.post("/webhook", async (req, res) => {
       else if (userSessions[from].step === 20) {
         userSessions[from].lastKm = parseInt(msg);
         userSessions[from].step = 21;
-        replyText = "Abhi gaadi kitne KM chali hai?";
+        replyText = "Mechanic ne kitne KM baad service bola tha? (Example: 4000)";
       }
 
       else if (userSessions[from].step === 21) {
+        userSessions[from].intervalKm = parseInt(msg);
+        userSessions[from].step = 22;
+        replyText = "Abhi gaadi kitne KM chali hai?";
+      }
+
+      else if (userSessions[from].step === 22) {
         let lastKm = userSessions[from].lastKm;
+        let intervalKm = userSessions[from].intervalKm;
         let currentKm = parseInt(msg);
 
-        let nextServiceKm = lastKm + 3000;
+        let nextServiceKm = lastKm + intervalKm;
         let remainingKm = nextServiceKm - currentKm;
 
         if (remainingKm <= 0) {
           replyText =
-            "⚠️ Service Due ho chuki hai!\nJaldi service karwa lo 🚗";
+            `⚠️ Service Due ho chuki hai!\nNext service tha ${nextServiceKm} KM par.\nJaldi service karwa lo 🚗`;
         } else {
           replyText =
             `🛠 Next Service at: ${nextServiceKm} KM\n\nAbhi ${remainingKm} KM baad service hogi 👍`;
