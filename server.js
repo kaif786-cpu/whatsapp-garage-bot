@@ -79,9 +79,18 @@ app.post("/webhook", async (req, res) => {
       let message = change.messages[0];
       let from = message.from;
 
-      let msg =
-        message.text?.body ||
-        message.interactive?.button_reply?.id;
+    let msg = "";
+
+if (message.type === "text") {
+  msg = message.text.body;
+} 
+else if (message.type === "interactive") {
+  msg = message.interactive.button_reply.id;
+}
+
+if (msg) {
+  msg = msg.trim().toLowerCase();
+}
 
       if (!userSessions[from]) userSessions[from] = { step: 0 };
 
