@@ -11,69 +11,75 @@ let customers = {};
 
 // ================= VERIFY WEBHOOK =================
 app.get("/webhook", (req, res) => {
-  const VERIFY_TOKEN = process.env.VERIFY_TOKEN;
-
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  if (mode && token === VERIFY_TOKEN) {
-    res.status(200).send(challenge);
+  if (mode === "subscribe" && token === process.env.VERIFY_TOKEN) {
+    return res.status(200).send(challenge);
   } else {
-    res.sendStatus(403);
+    return res.sendStatus(403);
   }
 });
 
 // ================= SEND TEXT =================
 async function sendText(to, message) {
-  await axios.post(
-    `https://graph.facebook.com/v25.0/${process.env.PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to: to,
-      text: { body: message }
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.ACCESS_TOKEN}`,
-        "Content-Type": "application/json"
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: to,
+        text: { body: message }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.ACCESS_TOKEN}`,
+          "Content-Type": "application/json"
+        }
       }
-    }
-  );
+    );
+  } catch (error) {
+    console.log("Text Error:", error.response?.data || error.message);
+  }
 }
 
 // ================= SEND MENU =================
 async function sendMenu(to) {
-  await axios.post(
-    `https://graph.facebook.com/v25.0/${process.env.PHONE_NUMBER_ID}/messages`,
-    {
-      messaging_product: "whatsapp",
-      to: to,
-      type: "interactive",
-      interactive: {
-        type: "button",
-        body: { text: "Garage Bot Menu 👇" },
-        action: {
-          buttons: [
-            {
-              type: "reply",
-              reply: { id: "save_service", title: "Save Service" }
-            },
-            {
-              type: "reply",
-              reply: { id: "check_due", title: "Check Service Due" }
-            }
-          ]
+  try {
+    await axios.post(
+      `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: to,
+        type: "interactive",
+        interactive: {
+          type: "button",
+          body: { text: "Garage Bot Menu 👇" },
+          action: {
+            buttons: [
+              {
+                type: "reply",
+                reply: { id: "save_service", title: "Save Service" }
+              },
+              {
+                type: "reply",
+                reply: { id: "check_due", title: "Check Due" }
+              }
+            ]
+          }
+        }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.ACCESS_TOKEN}`,
+          "Content-Type": "application/json"
         }
       }
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.ACCESS_TOKEN}`,
-        "Content-Type": "application/json"
-      }
-    }
-  );
+    );
+  } catch (error) {
+    console.log("Menu Error:", error.response?.data || error.message);
+  }
 }
 
 // ================= WEBHOOK =================
@@ -108,7 +114,7 @@ app.post("/webhook", async (req, res) => {
         await sendMenu(from);
       }
 
-      // ===== SAVE SERVICE BUTTON =====
+      // ===== SAVE SERVICE FLOW =====
       else if (msg === "save_service") {
         customers[from].step = "ask_date";
         await sendText(from, "Service date bhejo (DD-MM-YYYY)");
@@ -132,42 +138,42 @@ app.post("/webhook", async (req, res) => {
 
         await sendText(
           from,
-          "✅ Service Saved!\n\nDate: " +
-            customers[from].serviceDate +
-            "\nKM: " +
-            customers[from].serviceKM +
-            "\nNext Service After: " +
-            customers[from].nextServiceKM +
-            " KM"
+          `✅ Service Saved!
+
+Date: ${customers[from].serviceDate}
+KM: ${customers[from].serviceKM}
+Next Service After: ${customers[from].nextServiceKM} KM`
         );
       }
 
-      // ===== CHECK SERVICE DUE =====
+      // ===== CHECK DUE =====
       else if (msg === "check_due") {
         if (!customers[from].serviceKM) {
           await sendText(from, "❌ No service record found.");
         } else {
           await sendText(
             from,
-            "📋 Last Service Details:\n\nDate: " +
-              customers[from].serviceDate +
-              "\nKM: " +
-              customers[from].serviceKM +
-              "\nNext Service After: " +
-              customers[from].nextServiceKM +
-              " KM"
+            `📋 Last Service Details:
+
+Date: ${customers[from].serviceDate}
+KM: ${customers[from].serviceKM}
+Next Service After: ${customers[from].nextServiceKM} KM`
           );
         }
+      }
+
+      else {
+        await sendText(from, "Type 'hi' to open menu.");
       }
     }
 
     res.sendStatus(200);
   } catch (error) {
-    console.log(error);
+    console.log("Webhook Error:", error.message);
     res.sendStatus(500);
   }
 });
 
 app.listen(PORT, () => {
-  console.log("Server running on port " + PORT);
+  console.log("Server running...");
 });
