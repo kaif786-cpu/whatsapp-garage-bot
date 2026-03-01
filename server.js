@@ -26,7 +26,7 @@ app.get("/webhook", (req, res) => {
 async function sendText(to, message) {
   try {
     await axios.post(
-      `https://graph.facebook.com/v18.0/${process.env.PHONE_NUMBER_ID}/messages`,
+      `https://graph.facebook.com/v18.0/${process.env.986804867849479}/messages`,
       {
         messaging_product: "whatsapp",
         to: to,
@@ -34,7 +34,7 @@ async function sendText(to, message) {
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.ACCESS_TOKEN}`,
+          Authorization: `Bearer ${process.env.EAAg6o4omib8BQwz6hkgr0RRKTT9vS1ZCrvb5fy9qakkKAyaYnhM0nZCBL56lMIlt9k1COMZA21yqdgeRmCWVX2bdYcoe6JzewjPvSPg5cEwND5jR3ADY3ZAEvtkVV36yyrEVeVemK4BiCHdGazX0HLwQ5FcvqdClbWIHPzGLKJPKxfKBZBcSsuLBVeyRrSAZDZD}`,
           "Content-Type": "application/json"
         }
       }
